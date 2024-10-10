@@ -103,6 +103,23 @@ config ARCH_CHIP_C5471
 	---help---
 		TI TMS320 C5471, A180, or DA180 (ARM7TDMI)
 
+config ARCH_CHIP_CSK6
+	bool "LISTEANAI CSK6 6001A/6011B/6012"
+	select ARCH_HAVE_MPU
+	select ARCH_HAVE_FETCHADD
+	select ARCH_HAVE_I2CRESET
+	select ARCH_HAVE_HEAPCHECK
+	select ARCH_HAVE_PROGMEM
+	select ARCH_HAVE_SPI_BITORDER
+	select ARCH_HAVE_TICKLESS
+	select ARCH_HAVE_TIMEKEEPING
+	select ARM_HAVE_MPU_UNIFIED
+	select ARMV8M_HAVE_STACKCHECK
+	select ARCH_HAVE_ADJTIME
+	select ARCH_CORTEXM33
+	---help---
+		LISTEANAI CSK6 architectures (ARM Cortex-M33).
+
 config ARCH_CHIP_DM320
 	bool "TMS320 DM320"
 	select ARCH_ARM926EJS
@@ -441,23 +458,6 @@ config ARCH_CHIP_STM32
 	---help---
 		STMicro STM32 architectures (ARM Cortex-M3/4).
 
-config ARCH_CHIP_CSK6
-	bool "STMicro STM6 6001A/6011B/6012"
-	select ARCH_HAVE_MPU
-	select ARCH_HAVE_FETCHADD
-	select ARCH_HAVE_I2CRESET
-	select ARCH_HAVE_HEAPCHECK
-	select ARCH_HAVE_PROGMEM
-	select ARCH_HAVE_SPI_BITORDER
-	select ARCH_HAVE_TICKLESS
-	select ARCH_HAVE_TIMEKEEPING
-	select ARM_HAVE_MPU_UNIFIED
-	select ARMV8M_HAVE_STACKCHECK
-	select ARCH_HAVE_ADJTIME
-	select ARCH_CORTEXM33
-	---help---
-		LISTEANAI CSK6architectures (ARM Cortex-M33).		
-
 config ARCH_CHIP_STM32F0
 	bool "STMicro STM32 F0"
 	select ARCH_CORTEXM0
@@ -676,18 +676,20 @@ config ARCH_CHIP_MPS
 
 config ARCH_CHIP_QEMU_ARM
 	bool "QEMU virt platform (ARMv7a)"
-	select ARCH_HAVE_PSCI
 	select ARCH_HAVE_POWEROFF
 	select ARCH_HAVE_RESET
 	select ARCH_IDLE_CUSTOM
+	select ARM_HAVE_PSCI
+	select ARM_HAVE_NEON
 	---help---
 		QEMU virt platform (ARMv7a)
 
 config ARCH_CHIP_GOLDFISH_ARM
 	bool "GOLDFISH virt platform (ARMv7a)"
-	select ARCH_HAVE_PSCI
 	select ARCH_HAVE_POWEROFF
 	select ARCH_HAVE_RESET
+	select ARM_HAVE_PSCI
+	select ARM_HAVE_NEON
 	---help---
 		GOLDFISH virt platform (ARMv7a)
 
@@ -817,6 +819,7 @@ config ARCH_CORTEXM0
 	select ARM_THUMB
 	select ARCH_ARMV6M
 	select ARCH_HAVE_IRQPRIO
+	select ARCH_HAVE_IRQTRIGGER
 	select ARCH_HAVE_RAMVECTORS
 	select ARCH_HAVE_RESET
 	select ARCH_HAVE_HARDFAULT_DEBUG
@@ -1139,8 +1142,8 @@ config ARM_THUMB
 	bool "Thumb Mode"
 	default n
 
-config ARCH_HAVE_PSCI
-	bool "ARM PCSI (Power State Coordination Interface) Support"
+config ARM_HAVE_PSCI
+	bool "ARM PSCI (Power State Coordination Interface) Support"
 	default n
 	---help---
 		This Power State Coordination Interface (PSCI) defines
@@ -1187,6 +1190,13 @@ config ARM_HAVE_PACBTI
 	default n
 	---help---
 		Decide whether support PACBTI(Pointer Authentication and Branch Target Identification) Extension
+
+config ARM_PSCI
+	bool "Enabled PSCI"
+	depends on ARM_HAVE_PSCI
+	default n
+	---help---
+		See ARM_HAVE_PSCI for details
 
 config ARM_FPU_ABI_SOFT
 	bool "Soft Float ABI"
@@ -1373,7 +1383,6 @@ config DEBUG_SECUREFAULT
 
 config ARM_SEMIHOSTING_SYSLOG
 	bool "Semihosting SYSLOG support"
-	select ARCH_SYSLOG
 	select SYSLOG_REGISTER
 	---help---
 		Enable hooks to support semihosting syslog output.

@@ -39,7 +39,11 @@ static struct lib_lzfoutstream_s  g_lzfstream;
 
 #ifdef CONFIG_BOARD_COREDUMP_SYSLOG
 static struct lib_syslogstream_s  g_syslogstream;
+#  ifdef CONFIG_BOARD_COREDUMP_BASE64STREAM
+static struct lib_base64outstream_s g_base64stream;
+#  else
 static struct lib_hexdumpstream_s g_hexstream;
+#  endif
 #endif
 
 #ifdef CONFIG_BOARD_COREDUMP_BLKDEV
@@ -47,6 +51,12 @@ static struct lib_blkoutstream_s  g_blockstream;
 static unsigned char *g_blockinfo;
 #endif
 
+#ifdef CONFIG_BOARD_MEMORY_RANGE
+static struct memory_region_s g_memory_region[] =
+  {
+    CONFIG_BOARD_MEMORY_RANGE
+  };
+#endif
 static const struct memory_region_s *g_regions;
 
 /****************************************************************************
@@ -65,6 +75,7 @@ static const struct memory_region_s *g_regions;
 static void coredump_dump_syslog(pid_t pid)
 {
   FAR void *stream;
+  FAR const char *streamname;
   int logmask;
 
   logmask = setlogmask(LOG_ALERT);
@@ -75,8 +86,16 @@ static void coredump_dump_syslog(pid_t pid)
 
   lib_syslogstream(&g_syslogstream, LOG_EMERG);
   stream = &g_syslogstream;
+#ifdef CONFIG_BOARD_COREDUMP_BASE64STREAM
+  lib_base64outstream(&g_base64stream, stream);
+  stream = &g_base64stream;
+  streamname = "base64";
+#else
   lib_hexdumpstream(&g_hexstream, stream);
   stream = &g_hexstream;
+  streamname = "hex";
+#endif
+
 #  ifdef CONFIG_BOARD_COREDUMP_COMPRESSION
 
   /* Initialize LZF compression stream */
@@ -90,9 +109,10 @@ static void coredump_dump_syslog(pid_t pid)
   core_dump(g_regions, stream, pid);
 
 #  ifdef CONFIG_BOARD_COREDUMP_COMPRESSION
-  _alert("Finish coredump (Compression Enabled).\n");
+  _alert("Finish coredump (Compression Enabled). %s formatted\n",
+         streamname);
 #  else
-  _alert("Finish coredump.\n");
+  _alert("Finish coredump. %s formatted\n", streamname);
 #  endif
 
   setlogmask(logmask);
@@ -198,7 +218,7 @@ int coredump_add_memory_region(FAR const void *ptr, size_t size)
     {
       region = (FAR struct memory_region_s *)g_regions;
 
-      while (region->start != 0)
+      while (region->start < region->end)
         {
           if ((uintptr_t)ptr >= region->start &&
               (uintptr_t)ptr + size < region->end)
@@ -240,11 +260,21 @@ int coredump_add_memory_region(FAR const void *ptr, size_t size)
       /* Need a new region */
     }
 
-  region = lib_realloc((FAR void *)g_regions,
-                       sizeof(struct memory_region_s) * (count + 1));
+  region = lib_malloc(sizeof(struct memory_region_s) * (count + 1));
   if (region == NULL)
     {
       return -ENOMEM;
+    }
+
+  memcpy(region, g_regions, sizeof(struct memory_region_s) * count);
+
+  if (g_regions != NULL
+#ifdef CONFIG_BOARD_MEMORY_RANGE
+    && g_regions != g_memory_region
+#endif
+    )
+    {
+      lib_free((FAR void *)g_regions);
     }
 
   region[count - 1].start = (uintptr_t)ptr;
@@ -270,16 +300,9 @@ int coredump_initialize(void)
   blkcnt_t nsectors;
   int ret = 0;
 
-  if (CONFIG_BOARD_MEMORY_RANGE[0] != '\0')
-    {
-      coredump_set_memory_region(
-         alloc_memory_region(CONFIG_BOARD_MEMORY_RANGE));
-      if (g_regions == NULL)
-        {
-          _alert("Coredump memory region alloc fail\n");
-          return -ENOMEM;
-        }
-    }
+#ifdef CONFIG_BOARD_MEMORY_RANGE
+  g_regions = g_memory_region;
+#endif
 
 #ifdef CONFIG_BOARD_COREDUMP_BLKDEV
   ret = lib_blkoutstream_open(&g_blockstream,
@@ -288,8 +311,6 @@ int coredump_initialize(void)
     {
       _alert("%s Coredump device not found\n",
              CONFIG_BOARD_COREDUMP_BLKDEV_PATH);
-      free_memory_region(g_regions);
-      g_regions = NULL;
       return ret;
     }
 
@@ -301,8 +322,6 @@ int coredump_initialize(void)
   if (g_blockinfo == NULL)
     {
       _alert("Coredump device memory alloc fail\n");
-      free_memory_region(g_regions);
-      g_regions = NULL;
       lib_blkoutstream_close(&g_blockstream);
       return -ENOMEM;
     }

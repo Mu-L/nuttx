@@ -91,15 +91,20 @@ struct note_driver_ops_s
   CODE void (*irqhandler)(FAR struct note_driver_s *drv, int irq,
                           FAR void *handler, bool enter);
 #endif
+#ifdef CONFIG_SCHED_INSTRUMENTATION_WDOG
+  CODE void (*wdog)(FAR struct note_driver_s *drv, uint8_t event,
+                    FAR void *handler, FAR const void *arg);
+#endif
+#ifdef CONFIG_SCHED_INSTRUMENTATION_HEAP
+  CODE void (*heap)(FAR struct note_driver_s *drv, uint8_t event,
+                    FAR void *heap, FAR void *mem, size_t size,
+                    size_t curused);
+#endif
 #ifdef CONFIG_SCHED_INSTRUMENTATION_DUMP
-  CODE void (*string)(FAR struct note_driver_s *drv, uintptr_t ip,
-                      FAR const char *buf);
   CODE void (*event)(FAR struct note_driver_s *drv, uintptr_t ip,
                      uint8_t event, FAR const void *buf, size_t len);
   CODE void (*vprintf)(FAR struct note_driver_s *drv, uintptr_t ip,
                        FAR const char *fmt, va_list va) printf_like(3, 0);
-  CODE void (*vbprintf)(FAR struct note_driver_s *drv, uintptr_t ip,
-                        FAR const char *fmt, va_list va) printf_like(3, 0);
 #endif
 };
 

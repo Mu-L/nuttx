@@ -26,6 +26,7 @@
  ****************************************************************************/
 
 #include <nuttx/config.h>
+#include <arch/arch.h>
 
 /* Unsigned integer with bit position n set (signed in
  * assembly language).
@@ -94,6 +95,17 @@
 #define SCTLR_C_BIT         BIT(2)
 #define SCTLR_SA_BIT        BIT(3)
 #define SCTLR_I_BIT         BIT(12)
+
+#define ACTLR_AUX_BIT        BIT(9)
+#define ACTLR_CLPORTS_BIT    BIT(8)
+#define ACTLR_CLPMU_BIT      BIT(7)
+#define ACTLR_TESTR1_BIT     BIT(6)
+#define ACTLR_CDBG_BIT       BIT(5)
+#define ACTLR_PATCH_BIT      BIT(4)
+#define ACTLR_BPRED_BIT      BIT(3)
+#define ACTLR_POWER_BIT      BIT(2)
+#define ACTLR_DIAGNOSTIC_BIT BIT(1)
+#define ACTLR_REGIONS_BIT    BIT(0)
 
 /* SPSR M[3:0] define
  *
@@ -406,49 +418,6 @@ static inline void arch_nop(void)
     __ret = GET_EL(__el);                 \
     __ret;                                \
   })
-
-/****************************************************************************
- * Name:
- *   read_/write_/zero_ sysreg
- *
- * Description:
- *
- *   ARMv8 Architecture Registers access method
- *   All the macros need a memory clobber
- *
- ****************************************************************************/
-
-#define read_sysreg(reg)                         \
-  ({                                             \
-    uint64_t __val;                              \
-    __asm__ volatile ("mrs %0, " STRINGIFY(reg)  \
-                    : "=r" (__val) :: "memory"); \
-    __val;                                       \
-  })
-
-#define read_sysreg_dump(reg)                    \
-  ({                                             \
-    uint64_t __val;                              \
-    __asm__ volatile ("mrs %0, " STRINGIFY(reg)  \
-                    : "=r" (__val) :: "memory"); \
-    sinfo("%s, regval=0x%llx\n",                 \
-          STRINGIFY(reg), __val);                \
-    __val;                                       \
-  })
-
-#define write_sysreg(__val, reg)                   \
-  ({                                               \
-    __asm__ volatile ("msr " STRINGIFY(reg) ", %0" \
-                      : : "r" (__val) : "memory"); \
-  })
-
-#define zero_sysreg(reg)                            \
-  ({                                                \
-    __asm__ volatile ("msr " STRINGIFY(reg) ", xzr" \
-                      ::: "memory");                \
-  })
-
-/* Non-atomic modification of registers */
 
 #define modreg8(v,m,a)  putreg8((getreg8(a) & ~(m)) | ((v) & (m)), (a))
 #define modreg16(v,m,a) putreg16((getreg16(a) & ~(m)) | ((v) & (m)), (a))

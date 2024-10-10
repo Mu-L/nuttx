@@ -54,6 +54,7 @@
 
 #include "mmcsd.h"
 #include "mmcsd_sdio.h"
+#include "mmcsd_csd.h"
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -641,22 +642,35 @@ static void mmcsd_decode_csd(FAR struct mmcsd_state_s *priv, uint32_t csd[4])
            * C_SIZE: 73:64 from Word 2 and 63:62 from Word 3
            */
 
-          /* If the card is MMC and it has Block addressing
-           * then the correct  number of blocks should already be
-           * read from extended CSD register.
+          /* If the card is MMC and it has Block addressing, then C_SIZE
+           * parameter is used to compute the device capacity for devices up
+           * to 2 GB of density only, while SEC_COUNT is used to calculate
+           * densities greater than 2 GB. When the device density is greater
+           * than 2GB, 0xFFF should be set to C_SIZE bitfield (See 7.3.12)
            */
 
-#ifdef CONFIG_DEBUG_FS_INFO
           uint16_t csize        = ((csd[1] & 0x03ff) << 2) |
                                   ((csd[2] >> 30) & 3);
           uint8_t  csizemult    = (csd[2] >> 15) & 7;
-#endif
 
           priv->blockshift      = readbllen;
           priv->blocksize       = (1 << readbllen);
 
+          /* For emmc densities up to 2 GB */
+
+          if (csize != MMCSD_CSD_CSIZE_THRESHOLD)
+            {
+              priv->part.nblocks = ((uint32_t)csize + 1) *
+                                   (1 << (csizemult + 2));
+            }
+
           if (priv->blocksize > 512)
             {
+              if (csize != MMCSD_CSD_CSIZE_THRESHOLD)
+                {
+                  priv->part.nblocks <<= (priv->blockshift - 9);
+                }
+
               priv->blocksize   = 512;
               priv->blockshift  = 9;
             }
@@ -689,7 +703,7 @@ static void mmcsd_decode_csd(FAR struct mmcsd_state_s *priv, uint32_t csd[4])
 
           priv->blockshift      = 9;
           priv->blocksize       = 1 << 9;
-          priv->nblocks         = (csize + 1) << (19 - priv->blockshift);
+          priv->part.nblocks    = (csize + 1) << (19 - priv->blockshift);
 
 #ifdef CONFIG_DEBUG_FS_INFO
           decoded.u.sdblock.csize        = csize;
@@ -710,7 +724,7 @@ static void mmcsd_decode_csd(FAR struct mmcsd_state_s *priv, uint32_t csd[4])
                                   ((csd[2] >> 30) & 3);
       uint8_t  csizemult        = (csd[2] >> 15) & 7;
 
-      priv->nblocks             = ((uint32_t)csize + 1) *
+      priv->part.nblocks        = ((uint32_t)csize + 1) *
                                   (1 << (csizemult + 2));
       priv->blockshift          = readbllen;
       priv->blocksize           = (1 << readbllen);
@@ -725,7 +739,7 @@ static void mmcsd_decode_csd(FAR struct mmcsd_state_s *priv, uint32_t csd[4])
 
       if (priv->blocksize > 512)
         {
-          priv->nblocks       <<= (priv->blockshift - 9);
+          priv->part.nblocks  <<= (priv->blockshift - 9);
           priv->blocksize       = 512;
           priv->blockshift      = 9;
         }
@@ -882,8 +896,8 @@ static void mmcsd_decode_csd(FAR struct mmcsd_state_s *priv, uint32_t csd[4])
         decoded.fileformat, decoded.mmcecc, decoded.crc);
 
   finfo("Capacity: %luKb, Block size: %db, nblocks: %d wrprotect: %d\n",
-        (unsigned long)MMCSD_CAPACITY(priv->nblocks, priv->blockshift),
-        priv->blocksize, priv->nblocks, priv->wrprotect);
+        (unsigned long)MMCSD_CAPACITY(priv->part.nblocks, priv->blockshift),
+        priv->blocksize, priv->part.nblocks, priv->wrprotect);
 #endif
 }
 
@@ -2161,11 +2175,13 @@ static ssize_t mmcsd_writemultiple(FAR struct mmcsd_state_s *priv,
 static int mmcsd_open(FAR struct inode *inode)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   int ret;
 
   finfo("Entry\n");
   DEBUGASSERT(inode->i_private);
-  priv = inode->i_private;
+  part = inode->i_private;
+  priv = part->priv;
 
   /* Just increment the reference count on the driver */
 
@@ -2192,11 +2208,13 @@ static int mmcsd_open(FAR struct inode *inode)
 static int mmcsd_close(FAR struct inode *inode)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   int ret;
 
   finfo("Entry\n");
   DEBUGASSERT(inode->i_private);
-  priv = inode->i_private;
+  part = inode->i_private;
+  priv = part->priv;
 
   /* Decrement the reference count on the block driver */
 
@@ -2225,13 +2243,16 @@ static ssize_t mmcsd_read(FAR struct inode *inode, unsigned char *buffer,
                           blkcnt_t startsector, unsigned int nsectors)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   size_t sector;
   size_t endsector;
   ssize_t nread;
   ssize_t ret = nsectors;
 
   DEBUGASSERT(inode->i_private);
-  priv = inode->i_private;
+  part = inode->i_private;
+  priv = part->priv;
+
   finfo("startsector: %" PRIuOFF " nsectors: %u sectorsize: %d\n",
         startsector, nsectors, priv->blocksize);
 
@@ -2303,13 +2324,16 @@ static ssize_t mmcsd_write(FAR struct inode *inode,
                            blkcnt_t startsector, unsigned int nsectors)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   size_t sector;
   size_t endsector;
   ssize_t nwrite;
   ssize_t ret = nsectors;
 
   DEBUGASSERT(inode->i_private);
-  priv = inode->i_private;
+  part = inode->i_private;
+  priv = part->priv;
+
   finfo("startsector: %" PRIuOFF " nsectors: %u sectorsize: %d\n",
         startsector, nsectors, priv->blocksize);
 
@@ -2377,6 +2401,7 @@ static ssize_t mmcsd_write(FAR struct inode *inode,
 static int mmcsd_geometry(FAR struct inode *inode, struct geometry *geometry)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   int ret = -EINVAL;
 
   finfo("Entry\n");
@@ -2388,7 +2413,9 @@ static int mmcsd_geometry(FAR struct inode *inode, struct geometry *geometry)
 
       /* Is there a (supported) card inserted in the slot? */
 
-      priv = inode->i_private;
+      part = inode->i_private;
+      priv = part->priv;
+
       ret = mmcsd_lock(priv);
       if (ret < 0)
         {
@@ -2409,7 +2436,7 @@ static int mmcsd_geometry(FAR struct inode *inode, struct geometry *geometry)
           geometry->geo_available     = true;
           geometry->geo_mediachanged  = priv->mediachanged;
           geometry->geo_writeenabled  = !mmcsd_wrprotected(priv);
-          geometry->geo_nsectors      = priv->nblocks;
+          geometry->geo_nsectors      = part->nblocks;
           geometry->geo_sectorsize    = priv->blocksize;
 
           finfo("available: true mediachanged: %s writeenabled: %s\n",
@@ -2439,11 +2466,13 @@ static int mmcsd_geometry(FAR struct inode *inode, struct geometry *geometry)
 static int mmcsd_ioctl(FAR struct inode *inode, int cmd, unsigned long arg)
 {
   FAR struct mmcsd_state_s *priv;
+  FAR struct mmcsd_part_s *part;
   int ret;
 
   finfo("Entry\n");
   DEBUGASSERT(inode->i_private);
-  priv = inode->i_private;
+  part = inode->i_private;
+  priv = part->priv;
 
   /* Process the IOCTL by command */
 
@@ -3042,11 +3071,11 @@ static int mmcsd_read_extcsd(FAR struct mmcsd_state_s *priv,
       return ret;
     }
 
-  priv->nblocks = (extcsd[215] << 24) | (extcsd[214] << 16) |
-                  (extcsd[213] << 8) | extcsd[212];
+  priv->part.nblocks = (extcsd[215] << 24) | (extcsd[214] << 16) |
+                       (extcsd[213] << 8) | extcsd[212];
 
   finfo("MMC ext CSD read succsesfully, number of block %" PRId32 "\n",
-        priv->nblocks);
+        priv->part.nblocks);
 
   SDIO_GOTEXTCSD(priv->dev, extcsd);
 
@@ -4071,7 +4100,8 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
               /* Yes...  */
 
               finfo("Capacity: %" PRIu32 " Kbytes\n",
-                    MMCSD_CAPACITY(priv->nblocks, priv->blockshift));
+                    MMCSD_CAPACITY(priv->part.nblocks,
+                                   priv->blockshift));
               priv->mediachanged = true;
             }
 
@@ -4081,11 +4111,12 @@ static int mmcsd_probe(FAR struct mmcsd_state_s *priv)
 
           /* Create a MMCSD device name */
 
+          priv->part.priv = priv;
           snprintf(devname, sizeof(devname), "/dev/mmcsd%d", priv->minor);
 
           /* Inode private data is a reference to the MMCSD state structure */
 
-          register_blockdriver(devname, &g_bops, 0666, priv);
+          register_blockdriver(devname, &g_bops, 0666, &priv->part);
         }
 
       /* Regardless of whether or not a card was successfully initialized,
@@ -4366,7 +4397,7 @@ int mmcsd_slotinitialize(int minor, FAR struct sdio_dev_s *dev)
   snprintf(devname, sizeof(devname), "/dev/mmcsd%d", minor);
 
   finfo("MMC: %s %" PRIu64 "KB %s %s mode\n", devname,
-         ((uint64_t)priv->nblocks << priv->blockshift) >> 10,
+         ((uint64_t)priv->part.nblocks << priv->blockshift) >> 10,
          priv->widebus ? "4-bits" : "1-bit",
          mmc_get_mode_name(priv->mode));
 
