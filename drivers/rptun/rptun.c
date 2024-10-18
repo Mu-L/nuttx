@@ -35,10 +35,10 @@
 #include <nuttx/kmalloc.h>
 #include <nuttx/kthread.h>
 #include <nuttx/mutex.h>
+#include <nuttx/nuttx.h>
 #include <nuttx/power/pm.h>
 #include <nuttx/rptun/rptun.h>
 #include <nuttx/semaphore.h>
-#include <nuttx/wqueue.h>
 #include <metal/utilities.h>
 #include <openamp/remoteproc_loader.h>
 #include <openamp/remoteproc_virtio.h>
@@ -47,10 +47,6 @@
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#ifndef ALIGN_UP
-#  define ALIGN_UP(s, a)            (((s) + (a) - 1) & ~((a) - 1))
-#endif
 
 #define RPTUN_TIMEOUT_MS            20
 
@@ -85,9 +81,10 @@ struct rptun_store_s
  * Private Function Prototypes
  ****************************************************************************/
 
-static FAR struct remoteproc *rptun_init(FAR struct remoteproc *rproc,
-                                        FAR const struct remoteproc_ops *ops,
-                                         FAR void *arg);
+static FAR struct remoteproc *
+rptun_init(FAR struct remoteproc *rproc,
+           FAR const struct remoteproc_ops *ops,
+           FAR void *arg);
 static void rptun_remove(FAR struct remoteproc *rproc);
 static int rptun_config(struct remoteproc *rproc, void *data);
 static int rptun_start(FAR struct remoteproc *rproc);
@@ -419,9 +416,10 @@ static int rptun_callback(FAR void *arg, uint32_t vqid)
   return OK;
 }
 
-static FAR struct remoteproc *rptun_init(FAR struct remoteproc *rproc,
-                                        FAR const struct remoteproc_ops *ops,
-                                         FAR void *arg)
+static FAR struct remoteproc *
+rptun_init(FAR struct remoteproc *rproc,
+           FAR const struct remoteproc_ops *ops,
+           FAR void *arg)
 {
   rproc->ops = ops;
   rproc->priv = arg;

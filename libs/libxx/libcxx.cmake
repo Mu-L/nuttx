@@ -95,25 +95,12 @@ list(APPEND SRCS ${SRCSTMP})
 set(FLAGS -Wno-attributes -Wno-deprecated-declarations -Wno-shadow
           -Wno-sign-compare)
 
-if(NOT DEFINED GCCVER)
-  execute_process(COMMAND ${CMAKE_CXX_COMPILER} --version
-                  OUTPUT_VARIABLE GCC_VERSION_OUTPUT)
-  string(REGEX MATCH "\\+\\+.* ([0-9]+)\\.[0-9]+" GCC_VERSION_REGEX
-               "${GCC_VERSION_OUTPUT}")
-  set(GCCVER ${CMAKE_MATCH_1})
-endif()
-
-if(GCCVER EQUAL 12)
+if(GCCVER GREATER_EQUAL 12)
   list(APPEND FLAGS -Wno-maybe-uninitialized -Wno-alloc-size-larger-than)
 endif()
 
 nuttx_add_system_library(libcxx)
 target_sources(libcxx PRIVATE ${SRCS})
 target_compile_options(libcxx PRIVATE ${FLAGS})
-if(CONFIG_LIBCXXABI)
-  target_include_directories(
-    libcxx BEFORE PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libcxxabi/include)
-endif()
-
 target_include_directories(libcxx BEFORE
                            PRIVATE ${CMAKE_CURRENT_LIST_DIR}/libcxx/src)

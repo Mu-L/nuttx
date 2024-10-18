@@ -284,6 +284,12 @@
 #    define nosanitize_address
 #  endif
 
+#  if defined(__AVR32__)
+
+#    undef nosanitize_address
+#    define nosanitize_address
+#  endif
+
 /* The nosanitize_undefined attribute informs GCC don't sanitize it */
 
 #  define nosanitize_undefined __attribute__((no_sanitize("undefined")))
@@ -412,6 +418,9 @@
 #    undef  CONFIG_PTR_IS_NOT_INT
 
 #  elif defined(__AVR__)
+
+#    undef nosanitize_address
+#    define nosanitize_address
 
 #    if defined(__AVR_2_BYTE_PC__) || defined(__AVR_3_BYTE_PC__)
 /* 2-byte 3-byte PC does not support returnaddress */
@@ -1205,6 +1214,12 @@
 
 #ifndef CONFIG_HAVE_LONG_LONG
 #  undef CONFIG_FS_LARGEFILE
+#endif
+
+#ifdef CONFIG_DISABLE_FLOAT
+#  undef CONFIG_HAVE_FLOAT
+#  undef CONFIG_HAVE_DOUBLE
+#  undef CONFIG_HAVE_LONG_DOUBLE
 #endif
 
 /****************************************************************************
