@@ -69,7 +69,6 @@
 #  define current_task(cpu)      ((FAR struct tcb_s *)list_assignedtasks(cpu)->head)
 #else
 #  define current_task(cpu)      ((FAR struct tcb_s *)list_readytorun()->head)
-#  define this_task()            (current_task(this_cpu()))
 #endif
 
 #define is_idle_task(t)          ((t)->pid < CONFIG_SMP_NCPUS)
@@ -203,16 +202,6 @@ extern FAR struct tcb_s *g_delivertasks[CONFIG_SMP_NCPUS];
  */
 
 extern FAR struct tcb_s *g_running_tasks[CONFIG_SMP_NCPUS];
-
-/* This is an array of task control block (TCB) for the IDLE thread of each
- * CPU.  For the non-SMP case, this is a a single TCB; For the SMP case,
- * there is one TCB per CPU.  NOTE: The system boots on CPU0 into the IDLE
- * task.  The IDLE task later starts the other CPUs and spawns the user
- * initialization task.  That user initialization task is responsible for
- * bringing up the rest of the system.
- */
-
-extern struct tcb_s g_idletcb[CONFIG_SMP_NCPUS];
 
 /* This is the list of all tasks that are ready-to-run, but cannot be placed
  * in the g_readytorun list because:  (1) They are higher priority than the
@@ -375,7 +364,11 @@ void nxsched_sporadic_lowpriority(FAR struct tcb_s *tcb);
 void nxsched_suspend(FAR struct tcb_s *tcb);
 #endif
 
-#ifdef CONFIG_SMP
+#if defined(up_this_task)
+#  define this_task()            up_this_task()
+#elif !defined(CONFIG_SMP)
+#  define this_task()            ((FAR struct tcb_s *)g_readytorun.head)
+#else
 noinstrument_function
 static inline_function FAR struct tcb_s *this_task(void)
 {
@@ -389,7 +382,7 @@ static inline_function FAR struct tcb_s *this_task(void)
 
   flags = up_irq_save();
 
-  /* Obtain the TCB which is currently running on this CPU */
+  /* Obtain the TCB which is current running on this CPU */
 
   tcb = current_task(this_cpu());
 
@@ -398,7 +391,9 @@ static inline_function FAR struct tcb_s *this_task(void)
   up_irq_restore(flags);
   return tcb;
 }
+#endif
 
+#ifdef CONFIG_SMP
 void nxsched_process_delivered(int cpu);
 #else
 #  define nxsched_select_cpu(a)     (0)
@@ -420,6 +415,7 @@ void nxsched_process_cpuload_ticks(clock_t ticks);
 #ifdef CONFIG_SCHED_CRITMONITOR
 void nxsched_resume_critmon(FAR struct tcb_s *tcb);
 void nxsched_suspend_critmon(FAR struct tcb_s *tcb);
+void nxsched_update_critmon(FAR struct tcb_s *tcb);
 #endif
 
 #if CONFIG_SCHED_CRITMONITOR_MAXTIME_PREEMPTION >= 0

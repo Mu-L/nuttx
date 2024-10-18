@@ -378,7 +378,7 @@ void files_initlist(FAR struct filelist *list)
  *
  ****************************************************************************/
 
-#ifdef CONFIG_DUMP_ON_EXIT
+#ifdef CONFIG_SCHED_DUMP_ON_EXIT
 void files_dumplist(FAR struct filelist *list)
 {
   int count = files_countlist(list);
@@ -512,16 +512,13 @@ void files_putlist(FAR struct filelist *list)
  * Name: files_countlist
  *
  * Description:
- *   Given a file descriptor, return the corresponding instance of struct
- *   file.
+ *   Get file count from file list.
  *
  * Input Parameters:
- *   fd    - The file descriptor
- *   filep - The location to return the struct file instance
+ *   list - Pointer to the file list structure.
  *
  * Returned Value:
- *   Zero (OK) is returned on success; a negated errno value is returned on
- *   any failure.
+ *   file count of file list.
  *
  ****************************************************************************/
 

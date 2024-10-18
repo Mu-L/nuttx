@@ -293,12 +293,13 @@ enum note_tag_e
   NOTE_TAG_APP,
   NOTE_TAG_ARCH,
   NOTE_TAG_AUDIO,
-  NOTE_TAG_BOARD,
+  NOTE_TAG_BOARDS,
   NOTE_TAG_CRYPTO,
   NOTE_TAG_DRIVERS,
   NOTE_TAG_FS,
   NOTE_TAG_GRAPHICS,
   NOTE_TAG_INPUT,
+  NOTE_TAG_LIBS,
   NOTE_TAG_MM,
   NOTE_TAG_NET,
   NOTE_TAG_SCHED,
@@ -319,15 +320,8 @@ struct note_common_s
   uint8_t nc_type;             /* See enum note_type_e */
   uint8_t nc_priority;         /* Thread/task priority */
   uint8_t nc_cpu;              /* CPU thread/task running on */
-  pid_t nc_pid;                /* ID of the thread/task */
-
-  /* Time when note was buffered (sec) */
-
-  time_t nc_systime_sec;
-
-  /* Time when note was buffered (nsec) */
-
-  long nc_systime_nsec;
+  pid_t   nc_pid;              /* ID of the thread/task */
+  clock_t nc_systime;          /* Time when note was buffered */
 };
 
 /* This is the specific form of the NOTE_START note */
@@ -523,6 +517,12 @@ struct note_filter_mode_s
 #endif
 };
 
+struct note_filter_named_mode_s
+{
+  char name[NAME_MAX];
+  struct note_filter_mode_s mode;
+};
+
 /* This is the type of the argument passed to the NOTECTL_GETSYSCALLFILTER
  * and NOTECTL_SETSYSCALLFILTER ioctls
  */
@@ -531,6 +531,12 @@ struct note_filter_mode_s
 struct note_filter_syscall_s
 {
   uint8_t syscall_mask[(SYS_nsyscalls + 7) / 8];
+};
+
+struct note_filter_named_syscall_s
+{
+  char name[NAME_MAX];
+  struct note_filter_syscall_s syscall_mask;
 };
 #endif
 
@@ -543,9 +549,21 @@ struct note_filter_irq_s
   uint8_t irq_mask[(NR_IRQS + 7) / 8];
 };
 
+struct note_filter_named_irq_s
+{
+  char name[NAME_MAX];
+  struct note_filter_irq_s irq_mask;
+};
+
 struct note_filter_tag_s
 {
   uint8_t tag_mask[(NOTE_TAG_MAX + 7) / 8];
+};
+
+struct note_filter_named_tag_s
+{
+  char name[NAME_MAX];
+  struct note_filter_tag_s tag_mask;
 };
 
 /****************************************************************************
@@ -578,35 +596,33 @@ extern "C"
  ****************************************************************************/
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION
-void sched_note_start(FAR struct tcb_s *tcb);
-void sched_note_stop(FAR struct tcb_s *tcb);
+void sched_note_add(FAR const void *note, size_t notelen);
 #else
-#  define sched_note_start(t)
-#  define sched_note_stop(t)
+#  define sched_note_add(n,l)
 #endif
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION_SWITCH
+void sched_note_start(FAR struct tcb_s *tcb);
+void sched_note_stop(FAR struct tcb_s *tcb);
 void sched_note_suspend(FAR struct tcb_s *tcb);
 void sched_note_resume(FAR struct tcb_s *tcb);
 #else
+#  define sched_note_stop(t)
+#  define sched_note_start(t)
 #  define sched_note_suspend(t)
 #  define sched_note_resume(t)
 #endif
 
-#if defined(CONFIG_SMP) && defined(CONFIG_SCHED_INSTRUMENTATION)
+#if defined(CONFIG_SMP) && defined(CONFIG_SCHED_INSTRUMENTATION_SWITCH)
 void sched_note_cpu_start(FAR struct tcb_s *tcb, int cpu);
 void sched_note_cpu_started(FAR struct tcb_s *tcb);
-#else
-#  define sched_note_cpu_start(t,c)
-#  define sched_note_cpu_started(t)
-#endif
-
-#if defined(CONFIG_SMP) && defined(CONFIG_SCHED_INSTRUMENTATION_SWITCH)
 void sched_note_cpu_pause(FAR struct tcb_s *tcb, int cpu);
 void sched_note_cpu_paused(FAR struct tcb_s *tcb);
 void sched_note_cpu_resume(FAR struct tcb_s *tcb, int cpu);
 void sched_note_cpu_resumed(FAR struct tcb_s *tcb);
 #else
+#  define sched_note_cpu_start(t,c)
+#  define sched_note_cpu_started(t)
 #  define sched_note_cpu_pause(t,c)
 #  define sched_note_cpu_paused(t)
 #  define sched_note_cpu_resume(t,c)
@@ -696,8 +712,8 @@ void sched_note_printf_ip(uint32_t tag, uintptr_t ip, FAR const char *fmt,
  ****************************************************************************/
 
 #ifdef CONFIG_SCHED_INSTRUMENTATION_FILTER
-void sched_note_filter_mode(FAR struct note_filter_mode_s *oldm,
-                            FAR struct note_filter_mode_s *newm);
+void sched_note_filter_mode(FAR struct note_filter_named_mode_s *oldm,
+                            FAR struct note_filter_named_mode_s *newm);
 #endif
 
 /****************************************************************************
@@ -722,8 +738,8 @@ void sched_note_filter_mode(FAR struct note_filter_mode_s *oldm,
 
 #if defined(CONFIG_SCHED_INSTRUMENTATION_FILTER) && \
     defined(CONFIG_SCHED_INSTRUMENTATION_SYSCALL)
-void sched_note_filter_syscall(FAR struct note_filter_syscall_s *oldf,
-                               FAR struct note_filter_syscall_s *newf);
+void sched_note_filter_syscall(FAR struct note_filter_named_syscall_s *oldf,
+                               FAR struct note_filter_named_syscall_s *newf);
 #endif
 
 /****************************************************************************
@@ -748,14 +764,14 @@ void sched_note_filter_syscall(FAR struct note_filter_syscall_s *oldf,
 
 #if defined(CONFIG_SCHED_INSTRUMENTATION_FILTER) && \
     defined(CONFIG_SCHED_INSTRUMENTATION_IRQHANDLER)
-void sched_note_filter_irq(FAR struct note_filter_irq_s *oldf,
-                           FAR struct note_filter_irq_s *newf);
+void sched_note_filter_irq(FAR struct note_filter_named_irq_s *oldf,
+                           FAR struct note_filter_named_irq_s *newf);
 #endif
 
 #if defined(CONFIG_SCHED_INSTRUMENTATION_FILTER) && \
     defined(CONFIG_SCHED_INSTRUMENTATION_DUMP)
-void sched_note_filter_tag(FAR struct note_filter_tag_s *oldf,
-                           FAR struct note_filter_tag_s *newf);
+void sched_note_filter_tag(FAR struct note_filter_named_tag_s *oldf,
+                           FAR struct note_filter_named_tag_s *newf);
 #endif
 
 #endif /* defined(__KERNEL__) || defined(CONFIG_BUILD_FLAT) */

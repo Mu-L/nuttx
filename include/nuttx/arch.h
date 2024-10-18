@@ -112,6 +112,19 @@
 #endif /* CONFIG_ARCH_HAVE_MULTICPU */
 
 /****************************************************************************
+ * Name: up_this_cpu
+ *
+ * Description:
+ *   Return the logical core number. Default implementation is 1:1 mapping,
+ *   i.e. physical=logical.
+ *
+ ****************************************************************************/
+
+#ifndef CONFIG_ARCH_HAVE_CPUID_MAPPING
+#  define up_this_cpu() up_cpu_index()
+#endif
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
 
@@ -941,6 +954,43 @@ int up_copy_section(FAR void *dest, FAR const void *src, size_t n);
 #ifndef CONFIG_PIC
 #  define up_setpicbase(picbase)
 #  define up_getpicbase(ppicbase)
+#endif
+
+/****************************************************************************
+ * Percpu support
+ ****************************************************************************/
+
+/****************************************************************************
+ * Name: up_update_task
+ *
+ * Description:
+ *   We can utilize percpu storage to hold information about the
+ *   current running task. If we intend to implement this feature, we would
+ *   need to define two macros that help us manage this percpu information
+ *   effectively.
+ *
+ *   up_this_task: This macro is designed to read the contents of the percpu
+ *                 register to retrieve information about the current
+ *                 running task.This allows us to quickly access
+ *                 task-specific data without having to disable interrupts,
+ *                 access global variables and obtain the current cpu index.
+ *
+ *   up_update_task: This macro is responsible for updating the contents of
+ *                   the percpu register.It is typically called during
+ *                   initialization or when a context switch occurs to ensure
+ *                   that the percpu register reflects the information of the
+ *                   newly running task.
+ *
+ * Input Parameters:
+ *   current tcb
+ *
+ * Returned Value:
+ *   current tcb
+ *
+ ****************************************************************************/
+
+#ifndef up_update_task
+#  define up_update_task(t)
 #endif
 
 /****************************************************************************
@@ -2939,8 +2989,6 @@ int up_debugpoint_remove(int type, FAR void *addr, size_t size);
 
 #endif
 
-#ifdef CONFIG_PCI
-
 /****************************************************************************
  * Name: up_alloc_irq_msi
  *
@@ -2978,6 +3026,8 @@ int up_alloc_irq_msi(uint8_t busno, uint32_t devfn, FAR int *irq, int num);
  ****************************************************************************/
 
 void up_release_irq_msi(FAR int *irq, int num);
+
+#ifdef CONFIG_PCI
 
 /****************************************************************************
  * Name: up_connect_irq
